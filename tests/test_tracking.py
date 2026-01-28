@@ -2,19 +2,20 @@ import torch
 import imageio.v3 as iio
 import numpy as np
 import cv2
+from PIL import Image
 
 # Clear CUDA cache
 torch.cuda.empty_cache()
 
 # Load local video
-video_path = './saved_videos/wrist2.webm'
+video_path = '../saved_videos/wrist2.webm'
 frames = iio.imread(video_path, plugin="FFMPEG")  # plugin="pyav"
 
 print(f"Video shape: {frames.shape}")
 print(f"Number of frames: {len(frames)}")
 
 device = 'cuda'
-grid_size = 5  # Reduced from 10 to 5
+grid_size = 30
 
 # Reduce video resolution or number of frames if needed
 # Option 1: Downsample frames (use every Nth frame) - more aggressive
@@ -41,18 +42,21 @@ video = torch.tensor(frames).permute(0, 3, 1, 2)[None].float().to(device)  # B T
 print(f"Video tensor shape: {video.shape}")
 print(f"Video memory usage: {video.element_size() * video.nelement() / 1024**3:.2f} GB")
 
+input_mask = '../saved_videos/wrist2_mask.png'
+segm_mask = np.array(Image.open(input_mask))
+
 # Run Offline CoTracker:
 print("Loading model...")
 with torch.cuda.amp.autocast():  # Use mixed precision to save memory
     cotracker = torch.hub.load("facebookresearch/co-tracker", "cotracker3_offline").to(device)
     print("Running inference...")
-    pred_tracks, pred_visibility = cotracker(video, grid_size=grid_size) # B T N 2,  B T N 1
+    pred_tracks, pred_visibility = cotracker(video, grid_size=grid_size, segm_mask=torch.from_numpy(segm_mask)[None, None]) # B T N 2,  B T N 1
 
 # Visualize and save the video with tracks
 from cotracker.utils.visualizer import Visualizer
 import os
 
 os.makedirs("./saved_videos", exist_ok=True)
-vis = Visualizer(save_dir="./saved_videos", pad_value=120, linewidth=3)
-vis.visualize(video, pred_tracks, pred_visibility, query_frame=0, filename="wrist2_tracked")
-print("Saved video with tracks to ./saved_videos/wrist2_tracked.mp4")
+vis = Visualizer(save_dir="../saved_videos", pad_value=120, linewidth=1)
+vis.visualize(video, pred_tracks, pred_visibility, query_frame=0, filename="wrist2_tracked_new")
+# print("Saved video with tracks to ./saved_videos/wrist2_tracked.mp4")
